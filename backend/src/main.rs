@@ -87,34 +87,33 @@ async fn scan_handler(
         "Checking Dev Reputation (RugCheck.xyz)...".to_string(),
     ];
 
-    let tx_count = if address.starts_with("0x") {
-        fetch_evm_tx_count(&address, &state.alchemy_key, &state.http_client).await?
+    let (
+        tx_count,
+        dynamic_top_10,
+        dynamic_mint_auth,
+        dynamic_freeze_auth,
+        dynamic_honeypot,
+        dynamic_lp_lock,
+    ) = if address.starts_with("0x") {
+        let count = fetch_evm_tx_count(&address, &state.alchemy_key, &state.http_client).await?;
+        (
+            count,
+            "12.4% (Safe - EVM Placeholder)".to_string(),
+            "Safe - EVM Placeholder".to_string(),
+            "Safe - EVM Placeholder".to_string(),
+            "Safe - EVM Placeholder".to_string(),
+            "Unlocked (EVM Placeholder)".to_string(),
+        )
     } else {
-        fetch_solana_tx_count(&address, &state.alchemy_key, &state.http_client).await?
-    };
+        let f1 = fetch_solana_tx_count(&address, &state.alchemy_key, &state.http_client);
+        let f2 = fetch_solana_token_metrics(&address, &state.alchemy_key, &state.http_client);
+        let f3 = fetch_solana_authorities(&address, &state.alchemy_key, &state.http_client);
+        let f4 = fetch_solana_honeypot(&address, &state.alchemy_key, &state.http_client);
+        let f5 = fetch_solana_lp_lock(&address, &state.alchemy_key, &state.http_client);
 
-    let dynamic_top_10 = if address.starts_with("0x") {
-        "12.4% (Safe - EVM Placeholder)".to_string()
-    } else {
-        fetch_solana_token_metrics(&address, &state.alchemy_key, &state.http_client).await?
-    };
-
-    let (dynamic_mint_auth, dynamic_freeze_auth) = if address.starts_with("0x") {
-        ("Safe - EVM Placeholder".to_string(), "Safe - EVM Placeholder".to_string())
-    } else {
-        fetch_solana_authorities(&address, &state.alchemy_key, &state.http_client).await?
-    };
-
-    let dynamic_honeypot = if address.starts_with("0x") {
-        "Safe - EVM Placeholder".to_string()
-    } else {
-        fetch_solana_honeypot(&address, &state.alchemy_key, &state.http_client).await?
-    };
-
-    let dynamic_lp_lock = if address.starts_with("0x") {
-        "Unlocked (EVM Placeholder)".to_string()
-    } else {
-        fetch_solana_lp_lock(&address, &state.alchemy_key, &state.http_client).await?
+        let (r1, r2, r3, r4, r5) = tokio::join!(f1, f2, f3, f4, f5);
+        let (mint_auth, freeze_auth) = r3?;
+        (r1?, r2?, mint_auth, freeze_auth, r4?, r5?)
     };
 
     logs.push("Done.".to_string());
