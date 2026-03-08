@@ -83,6 +83,7 @@ async fn scan_handler(
         "Verifying Mint & Freeze Authorities...".to_string(),
         "Checking Liquidity Pools...".to_string(),
         "Running Honeypot Simulation...".to_string(),
+        "Calculating Top 10 Holder Distribution...".to_string(),
         "Checking Dev Reputation (RugCheck.xyz)...".to_string(),
     ];
 
@@ -90,6 +91,12 @@ async fn scan_handler(
         fetch_evm_tx_count(&address, &state.alchemy_key, &state.http_client).await?
     } else {
         fetch_solana_tx_count(&address, &state.alchemy_key, &state.http_client).await?
+    };
+
+    let dynamic_top_10 = if address.starts_with("0x") {
+        "12.4% (Safe - EVM Placeholder)".to_string()
+    } else {
+        fetch_solana_token_metrics(&address, &state.alchemy_key, &state.http_client).await?
     };
 
     logs.push("Done.".to_string());
@@ -112,7 +119,7 @@ async fn scan_handler(
             "Danger - Modifiable",
             "Danger - Active",
             "Unlocked",
-            "89.5% (Danger)",
+            dynamic_top_10,
             "Unknown (Awaiting RugCheck.xyz data)",
             "Danger - Failed simulation",
         )
@@ -124,7 +131,7 @@ async fn scan_handler(
             "Safe - Revoked",
             "Safe - Revoked",
             "Locked (100%)",
-            "12.4% (Safe)",
+            dynamic_top_10,
             "Safe (Verified by RugCheck.xyz placeholder)",
             "Safe - Passed simulation",
         )
@@ -194,7 +201,6 @@ async fn fetch_evm_tx_count(
         Ok(0)
     }
 }
-
 async fn fetch_solana_tx_count(
     address: &str,
     api_key: &str,
@@ -240,3 +246,95 @@ async fn fetch_solana_tx_count(
          Ok(0)
     }
 }
+
+async fn fetch_solana_token_metrics(
+    address: &str,
+    api_key: &str,
+    client: &reqwest::Client,
+) -> Result<String, (StatusCode, String)> {
+    if api_key == "YOUR_KEY" || api_key.is_empty() {
+        return Ok("65.4% (Danger)".to_string()); // Mock data
+    }
+
+    let url = format!("https://solana-mainnet.g.alchemy.com/v2/{}", api_key);
+    
+    // 1. Fetch Top 10 Largest Accounts
+    let accounts_body = json!({
+        "id": 1,
+        "jsonrpc": "2.0",
+        "method": "getTokenLargestAccounts",
+        "params": [address]
+    });
+
+    let accounts_res = client
+        .post(&url)
+        .json(&accounts_body)
+        .send()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let accounts_text = accounts_res.text().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    
+    if accounts_text.contains("Must be authenticated") || accounts_text.contains("Unauthorized") {
+         return Err((StatusCode::UNAUTHORIZED, "Invalid Alchemy API Key.".to_string()));
+    }
+
+    let accounts_json: Value = serde_json::from_str(&accounts_text)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    // Sum the top 10 balances (ignoring decimals for the raw ratio)
+    let mut top_10_sum = 0.0;
+    if let Some(accounts) = accounts_json.get("result").and_then(|r| r.get("value").and_then(|v| v.as_array())) {
+        for account in accounts.iter().take(10) {
+            if let Some(amount_str) = account.get("amount").and_then(|a| a.as_str()) {
+                if let Ok(amount) = amount_str.parse::<f64>() {
+                    top_10_sum += amount;
+                }
+            }
+        }
+    }
+
+    // 2. Fetch Total Token Supply
+    let supply_body = json!({
+        "id": 2,
+        "jsonrpc": "2.0",
+        "method": "getTokenSupply",
+        "params": [address]
+    });
+
+    let supply_res = client
+        .post(&url)
+        .json(&supply_body)
+        .send()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let supply_text = supply_res.text().await.map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    let supply_json: Value = serde_json::from_str(&supply_text)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+
+    let mut total_supply = 0.0;
+    if let Some(amount_str) = supply_json.get("result").and_then(|r| r.get("value").and_then(|v| v.get("amount")).and_then(|a| a.as_str())) {
+        if let Ok(amount) = amount_str.parse::<f64>() {
+            total_supply = amount;
+        }
+    }
+
+    // 3. Calculate Percentage
+    if total_supply == 0.0 {
+        return Ok("0% (Unknown)".to_string());
+    }
+
+    let percentage = (top_10_sum / total_supply) * 100.0;
+    
+    let formatted_pct = format!("{:.1}%", percentage);
+    
+    if percentage > 50.0 {
+        Ok(format!("{} (Danger - Cabal Detected)", formatted_pct))
+    } else if percentage < 15.0 {
+        Ok(format!("{} (Safe - Distributed)", formatted_pct))
+    } else {
+        Ok(format!("{} (Moderate Risk)", formatted_pct))
+    }
+}
+
