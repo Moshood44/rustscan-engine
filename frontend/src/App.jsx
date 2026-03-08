@@ -269,15 +269,15 @@ function App() {
                   </div>
                   
                   {/* Card 6: Dev Reputation */}
-                  <div className={`bg-[#161b22]/80 backdrop-blur border rounded-2xl p-6 transition-colors group ${scanResult.creator_reputation?.includes('Danger') ? 'border-red-500/30 hover:border-red-500/60' : 'border-slate-800 hover:border-cyber-blue/40'}`}>
+                  <div className={`bg-[#161b22]/80 backdrop-blur border rounded-2xl p-6 transition-colors group ${scanResult.dev_reputation?.includes('Danger') ? 'border-red-500/30 hover:border-red-500/60' : 'border-slate-800 hover:border-cyber-blue/40'}`}>
                     <div className="flex items-start justify-between mb-4">
                       <h3 className="text-slate-400 font-medium uppercase tracking-wider text-sm">Dev Reputation</h3>
                       <div className="p-2 bg-slate-800 rounded-lg group-hover:bg-slate-700 transition-colors">
                         <Star className="w-6 h-6 text-slate-300" />
                       </div>
                     </div>
-                    <p className={`text-lg md:text-xl font-bold mb-2 leading-tight ${scanResult.creator_reputation?.includes('Danger') ? 'text-red-500' : 'text-white'}`}>{scanResult.creator_reputation || 'Unknown'}</p>
-                    <p className="text-sm text-slate-500 font-mono">RugCheck.xyz integration</p>
+                    <p className={`text-lg md:text-xl font-bold mb-2 leading-tight ${scanResult.dev_reputation?.includes('Danger') ? 'text-red-500' : 'text-white'}`}>{scanResult.dev_reputation || 'Unknown'}</p>
+                    <p className="text-sm text-slate-500 font-mono">{scanResult.dev_desc || 'RugCheck.xyz integration'}</p>
                   </div>
                   
                   {/* Card 7: Honeypot Test (Bonus) */}

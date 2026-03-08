@@ -32,7 +32,8 @@ struct ScanResponse {
     freeze_authority: String,
     lp_lock_status: String,
     top_10_holder_concentration: String,
-    creator_reputation: String,
+    dev_reputation: String,
+    dev_desc: String,
     honeypot_test: String,
     terminal_logs: Vec<String>,
 }
@@ -94,6 +95,8 @@ async fn scan_handler(
         dynamic_freeze_auth,
         dynamic_honeypot,
         dynamic_lp_lock,
+        dynamic_dev_rep,
+        dynamic_dev_desc,
     ) = if address.starts_with("0x") {
         let count = fetch_evm_tx_count(&address, &state.alchemy_key, &state.http_client).await?;
         (
@@ -103,6 +106,8 @@ async fn scan_handler(
             "Safe - EVM Placeholder".to_string(),
             "Safe - EVM Placeholder".to_string(),
             "Unlocked (EVM Placeholder)".to_string(),
+            "Safe (EVM)".to_string(),
+            "Verified by EVM placeholder".to_string(),
         )
     } else {
         let f1 = fetch_solana_tx_count(&address, &state.alchemy_key, &state.http_client);
@@ -110,27 +115,27 @@ async fn scan_handler(
         let f3 = fetch_solana_authorities(&address, &state.alchemy_key, &state.http_client);
         let f4 = fetch_solana_honeypot(&address, &state.alchemy_key, &state.http_client);
         let f5 = fetch_solana_lp_lock(&address, &state.alchemy_key, &state.http_client);
+        let f6 = fetch_dev_reputation(&address, &state.http_client);
 
-        let (r1, r2, r3, r4, r5) = tokio::join!(f1, f2, f3, f4, f5);
+        let (r1, r2, r3, r4, r5, r6) = tokio::join!(f1, f2, f3, f4, f5, f6);
         let (mint_auth, freeze_auth) = r3?;
-        (r1?, r2?, mint_auth, freeze_auth, r4?, r5?)
+        let (dev_rep, dev_desc) = r6?;
+        (r1?, r2?, mint_auth, freeze_auth, r4?, r5?, dev_rep, dev_desc)
     };
 
     logs.push("Done.".to_string());
 
-    let (risk_level, security, activity, creator_reputation) = if tx_count < 10 {
+    let (risk_level, security, activity) = if tx_count < 10 {
         (
             "High Risk - New Wallet",
             "Initial Verification Warning",
             format!("{} Transactions detected", tx_count),
-            "Unknown (Awaiting RugCheck.xyz data)",
         )
     } else {
         (
             "Low Risk - Verified Dev",
             "Standard Verification Complete",
             format!("{} Transactions detected", tx_count),
-            "Safe (Verified by RugCheck.xyz placeholder)",
         )
     };
 
@@ -143,7 +148,8 @@ async fn scan_handler(
         freeze_authority: dynamic_freeze_auth,
         lp_lock_status: dynamic_lp_lock,
         top_10_holder_concentration: dynamic_top_10,
-        creator_reputation: creator_reputation.to_string(),
+        dev_reputation: dynamic_dev_rep,
+        dev_desc: dynamic_dev_desc,
         honeypot_test: dynamic_honeypot,
         terminal_logs: logs,
     };
@@ -464,4 +470,35 @@ async fn fetch_solana_lp_lock(
     } else {
         Ok("Unlocked".to_string())
     }
+}
+
+async fn fetch_dev_reputation(
+    address: &str,
+    client: &reqwest::Client,
+) -> Result<(String, String), (StatusCode, String)> {
+    let url = format!("https://api.rugcheck.xyz/v1/tokens/{}/report", address);
+    
+    let res = match client.get(&url).send().await {
+        Ok(r) => r,
+        Err(_) => return Ok(("Unknown (Awaiting RugCheck.xyz data)".to_string(), "Could not connect to API".to_string())),
+    };
+
+    if !res.status().is_success() {
+        return Ok(("Unknown (Awaiting RugCheck.xyz data)".to_string(), "API returned non-200 status".to_string()));
+    }
+
+    let text = res.text().await.unwrap_or_default();
+    let json: Value = serde_json::from_str(&text).unwrap_or(json!({}));
+    
+    if let Some(score) = json.get("score").and_then(|s| s.as_f64()) {
+        if score < 100.0 {
+            return Ok(("Safe - Trusted Developer".to_string(), "Creator has a clean history and verified social links.".to_string()));
+        } else if score > 500.0 {
+            return Ok(("Danger - High Risk".to_string(), "Creator has previously rugged or abandoned projects.".to_string()));
+        } else {
+            return Ok(("Moderate Risk".to_string(), "Creator has mixed history or limited data.".to_string()));
+        }
+    }
+    
+    Ok(("Unknown (Awaiting RugCheck.xyz data)".to_string(), "RugCheck.xyz integration".to_string()))
 }
