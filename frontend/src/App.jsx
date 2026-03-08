@@ -111,9 +111,7 @@ function App() {
       <header className="w-full sticky top-0 z-50 bg-[#0d1117]/80 backdrop-blur-md border-b border-slate-800">
         <div className="max-w-6xl mx-auto px-6 h-20 flex items-center justify-between">
           <a href="#scanner" className="flex items-center gap-3 group">
-            <div className="p-2 bg-rust-orange/10 border border-rust-orange/30 rounded-lg group-hover:bg-rust-orange/20 transition-colors">
-              <ShieldCheck className="w-6 h-6 text-rust-orange" />
-            </div>
+            <img src="/rustscan-logo.png" alt="RustScan Logo" className="w-10 h-10 rounded-xl shadow-[0_0_15px_rgba(206,65,43,0.3)] group-hover:shadow-[0_0_25px_rgba(206,65,43,0.6)] transition-all" />
             <span className="text-xl font-bold tracking-tight text-white drop-shadow-lg">RustScan</span>
           </a>
 
